@@ -1,0 +1,125 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+#BiocManager::install("DESeq2")
+#BiocManager::install("airway")
+
+library(DESeq2)
+library(airway)
+library(dplyr)
+data(airway)
+airway
+head(assay(airway))
+
+```
+
+
+```{r}
+assay(airway,"counts")[1:3,1:3]
+airway$dex
+airway$dex<- relevel(airway$dex,"untrt")
+airway$dex
+colData(airway)
+
+```
+
+There is rich information about which gene model was used for each gene:
+```{r}
+granges(airway)
+```
+
+1. Count Normalization
+```{r}
+# Create DESeq2Dataset object
+dds <- DESeqDataSet(airway, design = ~ dex)
+##############
+dds2<- estimateSizeFactors(dds)
+sizeFactors(dds2)
+dds2<- counts(dds2, normalized =T)
+head(dds2)
+```
+
+
+2. Exploratory data analysis (PCA & heirarchical clustering) - identifying outliers and sources of variation in the data:
+```{r}
+# Transform counts for data visualization
+rld <- rlog(dds, blind=TRUE)
+
+# Plot PCA 
+plotPCA(rld, intgroup="dex")
+
+# Extract the rlog matrix from the object
+rld_mat <- assay(rld)
+
+# Compute pairwise correlation values
+rld_cor <- cor(rld_mat)
+
+
+# Plot heatmap
+install.packages("pheatmap", "RColorBrewer", "viridis")
+library(pheatmap)
+pheatmap(rld_cor)
+```
+
+3. Run DESeq2
+```{r}
+#Fitting the model
+dds<- DESeq(dds)
+estimateSizeFactors(dds)
+
+#Check the fit of the dispersion estimates:
+plotDispEsts(dds)
+```
+
+
+5. Create contrasts to perform Wald testing on the shrunken log2 foldchanges between specific conditions:
+```{r}
+# Output results of Wald test for contrast
+res <- results(dds,contrast = c("dex","trt","untrt"), alpha=0.05)
+res <- res[order(res$padj),]
+head(res)
+```
+
+
+6. Output significant results:
+```{r}
+# Turn the results object into a data frame
+res <- results(dds)
+
+head(res)
+res_df <- data.frame(res)
+head(res_df)
+summary(res)
+```
+
+
+7. Visualization
+```{r}
+plotMA(res, ylim=c(-4,4), na.rm=T)
+
+#Annotation
+library("AnnotationDbi")
+library("org.Hs.eg.db")
+columns(org.Hs.eg.db)
+res$symbol <- mapIds(org.Hs.eg.db, 
+                     keys=row.names(res), 
+                     column="SYMBOL", 
+                     keytype="ENSEMBL",
+                     multiVals="first")
+res$entrez <- mapIds(org.Hs.eg.db, 
+                     keys=row.names(res), 
+                     column="ENTREZID", 
+                     keytype="ENSEMBL",
+                     multiVals="first")
+resOrdered <- res[order(res$padj),]
+head(resOrdered)
+
+```
+
+
+
+
